@@ -1,0 +1,159 @@
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+.kotlin
+
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+# ============================================================
+# Gradle
+# ============================================================
+
+.gradle/
+target/
+
+# Gradle local state
+.gradle-cache/
+
+# ============================================================
+# Compiled Java
+# ============================================================
+
+*.class
+*.jar
+*.war
+*.ear
+
+
+
+# ============================================================
+# IDE
+# ============================================================
+
+.idea/
+.settings/
+
+# ============================================================
+# macOS
+# ============================================================
+
+.AppleDouble
+.LSOverride
+
+# ============================================================
+# Windows
+# ============================================================
+
+Thumbs.db
+Desktop.ini
+
+# ============================================================
+# Logs
+# ============================================================
+
+*.log
+logs/
+log/
+
+# ============================================================
+# Temporary files
+# ============================================================
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+# ============================================================
+# Environment / secrets
+# ============================================================
+
+.env
+.env.*
+!.env.example
+
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# ============================================================
+# Local runtime configuration
+# ============================================================
+
+application-local.properties
+application-local.yml
+application-local.yaml
+
+local.properties
+
+# ============================================================
+# Database local files / dumps
+# ============================================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+*.sql.gz
+*.dump
+
+# ============================================================
+# Generated RoadRescue runtime
+# ============================================================
+
+app_server/
+generated/
+generated-server/
+runtime/
+
+# ============================================================
+# Tomcat runtime
+# ============================================================
+
+catalina.out
+work/
+temp/
+webapps/
