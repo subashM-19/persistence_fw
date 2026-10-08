@@ -6,6 +6,8 @@ import com.sentinal.persistencefw.metadata.ColumnMetaData;
 import com.sentinal.persistencefw.metadata.Schema;
 import com.sentinal.persistencefw.metadata.TableMetaData;
 
+import com.sentinal.persistencefw.transaction.*;
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -22,7 +24,8 @@ public class PersistenceManager
 	private static String url;
 	private static String username;
 	private static String password;
-	private static boolean initialized;
+	private static volatile boolean initialized;
+	private static DataSource dataSource;
 
 	private PersistenceManager()
 	{
@@ -37,7 +40,7 @@ public class PersistenceManager
 
 		if (initialized)
 		{
-			if (url.equals(databaseUrl) && java.util.Objects.equals(username, databaseUsername) && java.util.Objects.equals(password, databasePassword))
+			if (dataSource == null && url.equals(databaseUrl) && java.util.Objects.equals(username, databaseUsername) && java.util.Objects.equals(password, databasePassword))
 			{
 				return;
 			}
@@ -49,6 +52,34 @@ public class PersistenceManager
 		username = databaseUsername;
 		password = databasePassword;
 		initialized = true;
+	}
+
+	/**
+	 * Optional pooled connection provider; configure once before serving requests.
+	 */
+	public static synchronized void initialize(DataSource source)
+	{
+		if (source == null)
+		{
+			throw new IllegalArgumentException("DataSource cannot be null");
+		}
+		if (initialized)
+		{
+			if (dataSource == source)
+				return;
+			throw new IllegalStateException("PersistenceManager is already initialized");
+		}
+		dataSource = source;
+		initialized = true;
+	}
+
+	/**
+	 * Infrastructure hook. Application DB operations should use the persistence API.
+	 */
+	public static Connection openTransactionConnection() throws SQLException
+	{
+		validateInitialized();
+		return dataSource == null ? getConnection(url, username, password) : dataSource.getConnection();
 	}
 
 	private static void validateInitialized()
@@ -74,48 +105,31 @@ public class PersistenceManager
 
 		try
 		{
-			try (Connection connection = getConnection(url, username, password))
-			{
-				connection.setAutoCommit(false);
-
-				try
-				{
+			TransactionManager.assertWritable();
+			TransactionManager.execute(() -> {
+				TransactionManager.withConnection(connection -> {
 					executeOperation(connection, persistenceObject);
-
-					connection.commit();
-
-					clearModifiedColumns(persistenceObject);
-				}
-				catch (Exception e)
+					return null;
+				});
+				// Clear dirty flags only after the owning business transaction commits.
+				final List<Runnable> acknowledgements = new ArrayList<>();
+				for (PersistenceActions action : persistenceObject.getOperations())
 				{
-					try
-					{
-						connection.rollback();
-					}
-					catch (Exception rollbackException)
-					{
-						e.addSuppressed(rollbackException);
-					}
-
-					if (e instanceof OptimisticLockException)
-					{
-						throw (OptimisticLockException) e;
-					}
-
-					if (e instanceof PersistenceException)
-					{
-						throw (PersistenceException) e;
-					}
-
-					throw new PersistenceException("Transaction failed and was rolled back", e);
+					Row row = action.getValue();
+					Map<String, Object> written = new java.util.HashMap<>();
+					for (String column : row.getModifiedColumns())
+						written.put(column, row.get(column));
+					acknowledgements.add(() -> row.acknowledgeChanges(written));
 				}
-			}
+				TransactionManager.afterCommit(() -> acknowledgements.forEach(Runnable::run));
+				return null;
+			});
 		}
-		catch (PersistenceException e)
+		catch (RuntimeException | Error e)
 		{
 			throw e;
 		}
-		catch (Exception e)
+		catch (Throwable e)
 		{
 			throw new PersistenceException("Unable to execute database transaction", e);
 		}
@@ -233,6 +247,7 @@ public class PersistenceManager
 				statement.setObject(i + 1, values.get(i));
 			}
 
+			TransactionManager.prepareStatement(statement);
 			int affectedRows = statement.executeUpdate();
 
 			if (affectedRows != 1)
@@ -343,6 +358,7 @@ public class PersistenceManager
 				statement.setObject(i + 1, values.get(i));
 			}
 
+			TransactionManager.prepareStatement(statement);
 			int affectedRows = statement.executeUpdate();
 
 			if (affectedRows != 1)
@@ -354,14 +370,6 @@ public class PersistenceManager
 			{
 				row.setLoadedValue(lastModifiedTimeColumn.getName(), newLastModifiedTime);
 			}
-		}
-	}
-
-	private static void clearModifiedColumns(PersistenceObject persistenceObject)
-	{
-		for (PersistenceActions persistenceActions : persistenceObject.getOperations())
-		{
-			persistenceActions.getValue().clearModifiedColumns();
 		}
 	}
 
@@ -380,6 +388,7 @@ public class PersistenceManager
 		{
 			statement.setObject(1, primaryKeyValue);
 
+			TransactionManager.prepareStatement(statement);
 			int affectedRows = statement.executeUpdate();
 
 			if (affectedRows != 1)
@@ -417,6 +426,7 @@ public class PersistenceManager
 		{
 			statement.setObject(1, primaryKeyValue);
 
+			TransactionManager.prepareStatement(statement);
 			try (ResultSet resultSet = statement.executeQuery())
 			{
 				if (!resultSet.next())
@@ -882,9 +892,11 @@ public class PersistenceManager
 	public static PersistenceObject get(PersistenceQuery query)
 	{
 		validateInitialized();
-		try (Connection connection = getConnection(url, username, password))
+		try
 		{
-			return executeGet(connection, query);
+			if (query != null && query.isForUpdate())
+				TransactionManager.assertWritable();
+			return TransactionManager.withConnection(connection -> executeGet(connection, query));
 		}
 		catch (PersistenceException e)
 		{
@@ -899,10 +911,10 @@ public class PersistenceManager
 	public static PersistenceDataSet execute(PersistenceQuery query)
 	{
 		validateInitialized();
-		try (Connection connection = getConnection(url, username, password))
+		try
 		{
-			return executeQuery(connection, query);
-		}
+            return TransactionManager.withConnection(connection -> executeQuery(connection, query));
+        }
 		catch (PersistenceException e)
 		{
 			throw e;
@@ -942,6 +954,7 @@ public class PersistenceManager
 					statement.setObject(i + 1, values.get(i));
 				}
 
+				TransactionManager.prepareStatement(statement);
 				try (ResultSet resultSet = statement.executeQuery())
 				{
 					while (resultSet.next())
@@ -1000,6 +1013,7 @@ public class PersistenceManager
 					statement.setObject(i + 1, values.get(i));
 				}
 
+				TransactionManager.prepareStatement(statement);
 				try (ResultSet resultSet = statement.executeQuery())
 				{
 					while (resultSet.next())
