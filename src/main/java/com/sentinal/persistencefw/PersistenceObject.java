@@ -129,6 +129,7 @@ public class PersistenceObject
 	public void clearOperations()
 	{
 		operTypeVsOperTables.clear();
+		operations.clear();
 	}
 
 	public List<PersistenceActions> getOperations()

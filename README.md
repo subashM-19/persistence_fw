@@ -1,3 +1,5 @@
+> Business transactions are implemented and service proxies require no annotations. See [TRANSACTIONS.md](TRANSACTIONS.md) for proxies, all seven propagation modes, timeouts, rollback rules, and Road Rescue wiring.
+
 # Sentinal Persistence Framework
 
 Sentinal Persistence Framework is a lightweight Java persistence layer designed to reduce repetitive JDBC code while keeping database operations explicit and easy to understand.
@@ -792,8 +794,6 @@ It is intentionally smaller than large ORM frameworks and is currently designed 
 
 Possible future improvements include:
 
-* Transaction APIs
-* Stronger transaction boundary support
 * Additional join types
 * Richer criteria operators
 * Ordering support improvements

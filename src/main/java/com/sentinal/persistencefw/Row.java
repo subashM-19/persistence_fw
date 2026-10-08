@@ -134,6 +134,14 @@ public class Row
 		modifiedColumns.clear();
 	}
 
+	void acknowledgeChanges(java.util.Map<String, Object> written)
+	{
+		written.forEach((column, value) -> {
+			if (java.util.Objects.equals(get(column), value))
+				modifiedColumns.remove(column);
+		});
+	}
+
 	void setLoadedValue(String columnName, Object value)
 	{
 		int index = findColumn(columnName);
